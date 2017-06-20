@@ -5,7 +5,7 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 cd 
 
-read -p "change ssh port : 22?" -i 22 sshport
+read -p "change ssh port : 22?" sshport
 if [$sshport != ""]; then sed -i "s/Port 22/Port $sshport/" /etc/ssh/sshd_config; fi
 
 cat > /etc/apt/sources.list <<EOF
@@ -22,8 +22,8 @@ EOF
 
 apt-get -y update
 apt-get -y install git m2crypto fail2ban
+apt-get -y dist-upgrade
 
-git clone https://github.com/shadowsocksr/shadowsocksr.git
 #if you need chacha20
 #apt-get -y build-essential
 #wget https://download.libsodium.org/libsodium/releases/LATEST.tar.gz
@@ -32,7 +32,7 @@ git clone https://github.com/shadowsocksr/shadowsocksr.git
 #ldconfig
 #cd ..
 #rm LATEST.tar.gz
-
+git clone https://github.com/shadowsocksr/shadowsocksr.git
 cat > /etc/shadowsocks.json <<EOF
 {
     "server":"0.0.0.0",
@@ -103,7 +103,6 @@ net.ipv4.tcp_mtu_probing = 1
 #net.ipv4.tcp_congestion_control = hybla
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
-fs.file-max=1024000
 EOF
 
 
@@ -124,6 +123,7 @@ EOF
 
 #udpgw
 wget https://github.com/rufengsuixing/win-socks-to-Virtual-adapter/raw/master/linuxserver/badvpn-udpgw -O  /root/badvpn-udpgw
+chmod a+x /root/badvpn-udpgw
 cat >> /etc/network/interfaces <<EOF
 auto eth0:0
 iface eth0:0 inet static
