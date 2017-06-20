@@ -1,0 +1,185 @@
+﻿cd ~
+cat > 1.sh <<STOPAAA
+#! /bin/bash
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+export PATH
+cd 
+
+read -p "change ssh port : 22?" -i 22 sshport
+if [$sshport != ""]; then sed -i "s/Port 22/Port $sshport/" /etc/ssh/sshd_config; fi
+
+cat > /etc/apt/sources.list <<EOF
+deb http://httpredir.debian.org/debian experimental main
+deb http://http.us.debian.org/debian/ jessie main
+deb-src http://http.us.debian.org/debian/ jessie main
+deb http://httpredir.debian.org/debian unstable main
+deb http://security.debian.org/ jessie/updates main
+deb-src http://security.debian.org/ jessie/updates main
+deb http://http.us.debian.org/debian/ jessie-updates main
+deb-src http://http.us.debian.org/debian/ jessie-updates main
+EOF
+
+
+apt-get -y update
+apt-get -y install git m2crypto fail2ban
+
+git clone https://github.com/shadowsocksr/shadowsocksr.git
+#if you need chacha20
+#apt-get -y build-essential
+#wget https://download.libsodium.org/libsodium/releases/LATEST.tar.gz
+#tar xf LATEST.tar.gz && cd libsodium*
+#./configure && make && make install
+#ldconfig
+#cd ..
+#rm LATEST.tar.gz
+
+cat > /etc/shadowsocks.json <<EOF
+{
+    "server":"0.0.0.0",
+    "server_ipv6": "[::]",
+    "local_address":"127.0.0.1",
+    "local_port":1080,
+    "port_password":{
+        "443":"niyaogansha",
+        "80":"niyaogansha"
+    },
+    "timeout":300,
+    "method":"none",
+    "protocol": "auth_chain_a",
+    "protocol_param": "",
+    "obfs": "http_simple",
+    "obfs_param": "",
+    "redirect": "bing.com",
+    "dns_ipv6": false,
+    "fast_open": true,
+    "workers": 1
+}
+EOF
+
+dd if=/dev/zero of=/root/swap bs=1024 count=524288
+mkswap /root/swap
+sync
+swapon /root/swap
+echo "/root/swap none swap rw 0 1" >> /etc/fstab
+
+cat >> /etc/sysctl.conf <<EOF
+# max open files
+fs.file-max = 512000
+# max read buffer
+net.core.rmem_max = 67108864
+# max write buffer
+net.core.wmem_max = 67108864
+# default read buffer
+net.core.rmem_default = 65536
+# default write buffer
+net.core.wmem_default = 65536
+# max processor input queue
+net.core.netdev_max_backlog = 4096
+# max backlog
+net.core.somaxconn = 4096
+# resist SYN flood attacks
+net.ipv4.tcp_syncookies = 1
+# reuse timewait sockets when safe
+net.ipv4.tcp_tw_reuse = 1
+# turn off fast timewait sockets recycling
+net.ipv4.tcp_tw_recycle = 0
+# short FIN timeout
+net.ipv4.tcp_fin_timeout = 30
+# short keepalive time
+net.ipv4.tcp_keepalive_time = 1200
+# outbound port range
+net.ipv4.ip_local_port_range = 10000 65000
+# max SYN backlog
+net.ipv4.tcp_max_syn_backlog = 4096
+# max timewait sockets held by system simultaneously
+net.ipv4.tcp_max_tw_buckets = 5000
+# TCP receive buffer
+net.ipv4.tcp_rmem = 4096 87380 67108864
+# TCP write buffer
+net.ipv4.tcp_wmem = 4096 65536 67108864
+# turn on path MTU discovery
+net.ipv4.tcp_mtu_probing = 1
+# for high-latency network
+#net.ipv4.tcp_congestion_control = hybla
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+fs.file-max=1024000
+EOF
+
+
+cat >> /root/.bashrc <<EOF
+alias ssdir='cd /root/shadowsocksr'
+alias sslog='less /var/log/shadowsocksr.log'
+alias lastsslog='tail -n 20 /var/log/shadowsocksr.log'
+alias ssconfig='nano /etc/shadowsocks.json'
+alias sslink="ss -6 | awk '{print \$6}' | grep -o '.*:' | sort | uniq -c |sort -nr"
+alias ssstart='systemctl start shadowsocksr.service'
+alias ssstop='systemctl stop shadowsocksr.service'
+alias ssrestart='systemctl restart shadowsocksr.service'
+alias ssstatus='systemctl status shadowsocksr.service'
+alias udpgwstatus='systemctl status udpgw.service'
+alias udpgwstop='systemctl stop udpgw.service'
+alias udpgwstart='systemctl start udpgw.service'
+EOF
+
+#udpgw
+wget https://github.com/rufengsuixing/win-socks-to-Virtual-adapter/raw/master/linuxserver/badvpn-udpgw -O  /root/badvpn-udpgw
+cat >> /etc/network/interfaces <<EOF
+auto eth0:0
+iface eth0:0 inet static
+address 192.168.221.100
+netmask 255.255.255.0
+EOF
+cat > /etc/systemd/system/udpgw.service <<EOF
+[Unit]
+Description=udpgw
+After=network.target
+Wants=network.target
+[Service]
+LimitCORE=infinity
+LimitNOFILE=512000
+LimitNPROC=512000
+Type=simple
+PIDFile=/tmp/udpgw.pid
+ExecStart=/root/badvpn-udpgw --listen-addr 192.168.221.100:7300 --max-clients 60 --max-connections-for-client 400 --client-socket-sndbuf 40960000
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=udpgw.target
+EOF
+
+cat > /etc/systemd/system/shadowsocksr.service <<EOF
+[Unit]
+Description=ShadowsocksR server
+After=network.target
+Wants=network.target
+
+[Service]
+LimitCORE=infinity
+LimitNOFILE=512000
+LimitNPROC=512000
+Type=forking
+PIDFile=/var/run/shadowsocks.pid
+ExecStart=/usr/bin/python /root/shadowsocksr/shadowsocks/server.py --pid-file /var/run/shadowsocks.pid -c /etc/shadowsocks.json -d start
+ExecStop=/usr/bin/python /root/shadowsocksr/shadowsocks/server.py --pid-file /var/run/shadowsocks.pid -c /etc/shadowsocks.json -d stop
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable udpgw.service
+systemctl enable shadowsocksr.service
+
+echo "TZ='Asia/Shanghai'; export TZ" >> /etc/profile
+echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen
+echo "LANG=zh_CN.UTF-8" >> /etc/default/locale
+locale-gen
+echo "do not forget to change default password just for safe"
+STOPAAA
+chmod a+x 1.sh
+./1.sh
