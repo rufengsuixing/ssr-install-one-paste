@@ -6,7 +6,6 @@ export PATH
 cd 
 
 read -p "change ssh port : 22?" sshport
-if [$sshport != ""]; then sed -i "s/Port 22/Port $sshport/" /etc/ssh/sshd_config; fi
 
 cat > /etc/apt/sources.list <<EOF
 deb http://httpredir.debian.org/debian experimental main
@@ -146,7 +145,7 @@ KillMode=process
 Restart=always
 
 [Install]
-WantedBy=udpgw.target
+WantedBy=multi-user.target
 EOF
 
 cat > /etc/systemd/system/shadowsocksr.service <<EOF
