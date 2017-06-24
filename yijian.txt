@@ -171,9 +171,15 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
+cat >> /etc/crontab <<EOF
+0 4 * * * apt-get update && apt-get -y upgrade
+0 4 * * * cd /root/shadowsocksr && git pull && systemctl restart shadowsocks.service
+EOF
+
 systemctl daemon-reload
 systemctl enable udpgw.service
 systemctl enable shadowsocksr.service
+
 
 echo "TZ='Asia/Shanghai'; export TZ" >> /etc/profile
 echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen
